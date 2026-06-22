@@ -10,6 +10,8 @@ import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -35,6 +37,9 @@ function formatDate(dateString: string) {
 export default function TransactionsScreen() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedReceiptUrl, setSelectedReceiptUrl] = useState<string | null>(
+    null
+  );
 
   async function loadTransactions() {
     try {
@@ -74,10 +79,7 @@ export default function TransactionsScreen() {
       "Delete transaction",
       "Are you sure you want to delete this transaction?",
       [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
+        { text: "Cancel", style: "cancel" },
         {
           text: "Delete",
           style: "destructive",
@@ -104,109 +106,154 @@ export default function TransactionsScreen() {
   const netTotal = incomeTotal - expenseTotal;
 
   return (
-    <ScrollView style={styles.screen} showsVerticalScrollIndicator={false}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Transactions</Text>
+    <>
+      <ScrollView style={styles.screen} showsVerticalScrollIndicator={false}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Transactions</Text>
 
-        <View style={styles.searchBox}>
-          <Ionicons name="search-outline" size={20} color={COLORS.muted} />
-          <TextInput
-            placeholder="Search transactions..."
-            placeholderTextColor={COLORS.muted}
-            style={styles.searchInput}
-          />
-        </View>
-
-        <View style={styles.filterRow}>
-          <View style={[styles.filterPill, styles.activePill]}>
-            <Text style={styles.activePillText}>All</Text>
-          </View>
-          <View style={styles.filterPill}>
-            <Text style={styles.pillText}>Income</Text>
-          </View>
-          <View style={styles.filterPill}>
-            <Text style={styles.pillText}>Expense</Text>
-          </View>
-        </View>
-
-        <View style={styles.summaryCard}>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryLabel}>In</Text>
-            <Text style={[styles.summaryValue, { color: COLORS.green }]}>
-              +${incomeTotal.toFixed(2)}
-            </Text>
+          <View style={styles.searchBox}>
+            <Ionicons name="search-outline" size={20} color={COLORS.muted} />
+            <TextInput
+              placeholder="Search transactions..."
+              placeholderTextColor={COLORS.muted}
+              style={styles.searchInput}
+            />
           </View>
 
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryLabel}>Out</Text>
-            <Text style={[styles.summaryValue, { color: COLORS.red }]}>
-              ${expenseTotal.toFixed(2)}
-            </Text>
+          <View style={styles.filterRow}>
+            <View style={[styles.filterPill, styles.activePill]}>
+              <Text style={styles.activePillText}>All</Text>
+            </View>
+            <View style={styles.filterPill}>
+              <Text style={styles.pillText}>Income</Text>
+            </View>
+            <View style={styles.filterPill}>
+              <Text style={styles.pillText}>Expense</Text>
+            </View>
           </View>
 
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryLabel}>Net</Text>
-            <Text
-              style={[
-                styles.summaryValue,
-                { color: netTotal >= 0 ? COLORS.green : COLORS.red },
-              ]}
-            >
-              {netTotal >= 0 ? "+" : "-"}${Math.abs(netTotal).toFixed(2)}
-            </Text>
-          </View>
-        </View>
-      </View>
+          <View style={styles.summaryCard}>
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryLabel}>In</Text>
+              <Text style={[styles.summaryValue, { color: COLORS.green }]}>
+                +${incomeTotal.toFixed(2)}
+              </Text>
+            </View>
 
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator color={COLORS.primary} />
-          <Text style={styles.loadingText}>Loading transactions...</Text>
-        </View>
-      ) : transactions.length === 0 ? (
-        <View style={styles.emptyCard}>
-          <Text style={styles.emptyTitle}>No transactions yet</Text>
-          <Text style={styles.emptyText}>
-            Add your first expense or income from the Add tab.
-          </Text>
-        </View>
-      ) : (
-        <View style={styles.listCard}>
-          {transactions.map((item) => (
-            <View key={item.id} style={styles.transactionRow}>
-              <Text style={styles.date}>{formatDate(item.transaction_date)}</Text>
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryLabel}>Out</Text>
+              <Text style={[styles.summaryValue, { color: COLORS.red }]}>
+                ${expenseTotal.toFixed(2)}
+              </Text>
+            </View>
 
-              <View style={styles.iconCircle}>
-                <Text style={styles.emoji}>{item.emoji || "💰"}</Text>
-              </View>
-
-              <View style={styles.transactionInfo}>
-                <Text style={styles.transactionTitle}>
-                  {item.description || item.category}
-                </Text>
-                <Text style={styles.transactionCategory}>{item.category}</Text>
-              </View>
-
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryLabel}>Net</Text>
               <Text
                 style={[
-                  styles.amount,
-                  item.type === "income" && { color: COLORS.green },
+                  styles.summaryValue,
+                  { color: netTotal >= 0 ? COLORS.green : COLORS.red },
                 ]}
               >
-                {formatAmount(Number(item.amount), item.type)}
+                {netTotal >= 0 ? "+" : "-"}${Math.abs(netTotal).toFixed(2)}
               </Text>
+            </View>
+          </View>
+        </View>
+
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator color={COLORS.primary} />
+            <Text style={styles.loadingText}>Loading transactions...</Text>
+          </View>
+        ) : transactions.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>No transactions yet</Text>
+            <Text style={styles.emptyText}>
+              Add your first expense or income from the Add tab.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.listCard}>
+            {transactions.map((item) => (
+              <View key={item.id} style={styles.transactionRow}>
+                <Text style={styles.date}>{formatDate(item.transaction_date)}</Text>
+
+                <View style={styles.iconCircle}>
+                  <Text style={styles.emoji}>{item.emoji || "💰"}</Text>
+                </View>
+
+                <View style={styles.transactionInfo}>
+                  <Text style={styles.transactionTitle}>
+                    {item.description || item.category}
+                  </Text>
+                  <Text style={styles.transactionCategory}>{item.category}</Text>
+                </View>
+
+                <Text
+                  style={[
+                    styles.amount,
+                    item.type === "income" && { color: COLORS.green },
+                  ]}
+                >
+                  {formatAmount(Number(item.amount), item.type)}
+                </Text>
+
+                {item.receipt_url && (
+                  <TouchableOpacity
+                    style={styles.receiptButton}
+                    onPress={() => setSelectedReceiptUrl(item.receipt_url)}
+                  >
+                    <Ionicons
+                      name="receipt-outline"
+                      size={18}
+                      color={COLORS.primary}
+                    />
+                  </TouchableOpacity>
+                )}
+
+                <TouchableOpacity
+                  style={styles.deleteButton}
+                  onPress={() => handleDeleteTransaction(item.id)}
+                >
+                  <Ionicons name="trash-outline" size={18} color={COLORS.red} />
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        )}
+      </ScrollView>
+
+      <Modal
+        visible={!!selectedReceiptUrl}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedReceiptUrl(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.receiptModal}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Receipt</Text>
 
               <TouchableOpacity
-                style={styles.deleteButton}
-                onPress={() => handleDeleteTransaction(item.id)}
+                style={styles.modalCloseButton}
+                onPress={() => setSelectedReceiptUrl(null)}
               >
-                <Ionicons name="trash-outline" size={18} color={COLORS.red} />
+                <Ionicons name="close" size={22} color={COLORS.text} />
               </TouchableOpacity>
             </View>
-          ))}
+
+            {selectedReceiptUrl && (
+              <Image
+                source={{ uri: selectedReceiptUrl }}
+                style={styles.receiptImage}
+                resizeMode="contain"
+              />
+            )}
+          </View>
         </View>
-      )}
-    </ScrollView>
+      </Modal>
+    </>
   );
 }
 
@@ -361,13 +408,61 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: COLORS.text,
   },
+  receiptButton: {
+    marginLeft: 8,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#ECEBFF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   deleteButton: {
-    marginLeft: 10,
+    marginLeft: 8,
     width: 34,
     height: 34,
     borderRadius: 17,
     backgroundColor: "#FEE2E2",
     alignItems: "center",
     justifyContent: "center",
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  receiptModal: {
+    width: "100%",
+    maxWidth: 420,
+    backgroundColor: COLORS.card,
+    borderRadius: 24,
+    padding: 16,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: COLORS.text,
+  },
+  modalCloseButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#F2F4F8",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  receiptImage: {
+    width: "100%",
+    height: 420,
+    borderRadius: 16,
+    backgroundColor: "#F2F4F8",
   },
 });
