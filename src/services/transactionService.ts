@@ -82,6 +82,42 @@ export async function getTransactions() {
   return data as Transaction[];
 }
 
+export async function updateTransaction({
+  id,
+  amount,
+  type,
+  category,
+  description,
+  emoji,
+  transactionDate,
+}: {
+  id: string;
+  amount: number;
+  type: TransactionType;
+  category: string;
+  description: string;
+  emoji: string;
+  transactionDate: string;
+}) {
+  const { data, error } = await supabase
+    .from("transactions")
+    .update({
+      amount,
+      type,
+      category,
+      emoji,
+      description,
+      transaction_date: transactionDate,
+    })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  return data as Transaction;
+}
+
 export async function deleteTransaction(id: string) {
   const { error } = await supabase.from("transactions").delete().eq("id", id);
 
