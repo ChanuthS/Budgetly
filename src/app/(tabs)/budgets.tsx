@@ -1,11 +1,80 @@
 import { COLORS } from "@/constants/colors";
-import { budgets } from "@/constants/mockData";
+import { getCurrentMonthTransactions } from "@/services/transactionService";
 import { Ionicons } from "@expo/vector-icons";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useState } from "react";
+import {
+    ActivityIndicator,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from "react-native";
 
-
+const budgetLimits = [
+  { emoji: "🛒", name: "Groceries", budget: 400 },
+  { emoji: "🍽️", name: "Dining", budget: 250 },
+  { emoji: "🚗", name: "Transport", budget: 150 },
+  { emoji: "🎭", name: "Entertainment", budget: 200 },
+  { emoji: "🏥", name: "Health", budget: 200 },
+  { emoji: "🏠", name: "Housing", budget: 1200 },
+  { emoji: "📦", name: "Shopping", budget: 300 },
+  { emoji: "⚡", name: "Utilities", budget: 220 },
+];
 
 export default function BudgetsScreen() {
+  const [spentByCategory, setSpentByCategory] = useState<Record<string, number>>({});
+  const [loading, setLoading] = useState(true);
+
+  async function loadBudgets() {
+    try {
+      setLoading(true);
+      const transactions = await getCurrentMonthTransactions();
+
+      const totals: Record<string, number> = {};
+
+      transactions.forEach((transaction) => {
+        const category = transaction.category;
+        totals[category] = (totals[category] || 0) + Number(transaction.amount);
+      });
+
+      setSpentByCategory(totals);
+    } catch (error) {
+      console.log("Budget load error:", error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useFocusEffect(
+    useCallback(() => {
+      loadBudgets();
+    }, [])
+  );
+
+  const totalSpent = budgetLimits.reduce((sum, item) => {
+    return sum + (spentByCategory[item.name] || 0);
+  }, 0);
+
+  const totalBudget = budgetLimits.reduce((sum, item) => sum + item.budget, 0);
+  const remainingTotal = totalBudget - totalSpent;
+  const totalPercent = Math.min(Math.round((totalSpent / totalBudget) * 100), 100);
+
+  const monthLabel = new Date().toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+  });
+
+  if (loading) {
+    return (
+      <View style={styles.loadingScreen}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={styles.loadingText}>Loading budgets...</Text>
+      </View>
+    );
+  }
+
   return (
     <ScrollView style={styles.screen} showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
@@ -18,36 +87,64 @@ export default function BudgetsScreen() {
       </View>
 
       <View style={styles.overviewCard}>
-        <Text style={styles.overviewTitle}>June 2026 Overview</Text>
+        <Text style={styles.overviewTitle}>{monthLabel} Overview</Text>
 
         <View style={styles.overviewRow}>
           <View>
             <Text style={styles.label}>Total Spent</Text>
             <Text style={styles.totalSpent}>
-              $1294 <Text style={styles.totalBudget}>/ 1720</Text>
+              ${totalSpent.toFixed(0)}{" "}
+              <Text style={styles.totalBudget}>/ {totalBudget.toFixed(0)}</Text>
             </Text>
-            <Text style={styles.remaining}>$426 remaining this month</Text>
+            <Text
+              style={[
+                styles.remaining,
+                remainingTotal < 0 && { color: COLORS.red },
+              ]}
+            >
+              {remainingTotal >= 0
+                ? `$${remainingTotal.toFixed(0)} remaining this month`
+                : `$${Math.abs(remainingTotal).toFixed(0)} over budget`}
+            </Text>
           </View>
 
-          <View style={styles.circle}>
-            <Text style={styles.circleText}>75%</Text>
+          <View
+            style={[
+              styles.circle,
+              totalSpent > totalBudget && { borderColor: COLORS.red },
+            ]}
+          >
+            <Text
+              style={[
+                styles.circleText,
+                totalSpent > totalBudget && { color: COLORS.red },
+              ]}
+            >
+              {totalPercent}%
+            </Text>
           </View>
         </View>
       </View>
 
       <View style={styles.categoryTabs}>
-        {["Groceries", "Dining Out", "Transport", "Entertainment"].map((item, index) => (
-          <View key={item} style={[styles.tabPill, index === 0 && styles.activeTab]}>
-            <Text style={[styles.tabText, index === 0 && styles.activeTabText]}>{item}</Text>
+        {budgetLimits.slice(0, 4).map((item, index) => (
+          <View
+            key={item.name}
+            style={[styles.tabPill, index === 0 && styles.activeTab]}
+          >
+            <Text style={[styles.tabText, index === 0 && styles.activeTabText]}>
+              {item.name}
+            </Text>
           </View>
         ))}
       </View>
 
       <View style={styles.budgetList}>
-        {budgets.map((item) => {
-          const percent = Math.min(Math.round((item.spent / item.budget) * 100), 100);
-          const overBudget = item.spent > item.budget;
-          const remaining = item.budget - item.spent;
+        {budgetLimits.map((item) => {
+          const spent = spentByCategory[item.name] || 0;
+          const percent = Math.min(Math.round((spent / item.budget) * 100), 100);
+          const overBudget = spent > item.budget;
+          const remaining = item.budget - spent;
 
           return (
             <View key={item.name} style={styles.budgetCard}>
@@ -58,7 +155,9 @@ export default function BudgetsScreen() {
                 </View>
 
                 <Text style={[styles.statusText, overBudget && { color: COLORS.red }]}>
-                  {overBudget ? `$${Math.abs(remaining)} over budget` : `${Math.round((remaining / item.budget) * 100)}% remaining`}
+                  {overBudget
+                    ? `$${Math.abs(remaining).toFixed(0)} over budget`
+                    : `${Math.round((remaining / item.budget) * 100)}% remaining`}
                 </Text>
               </View>
 
@@ -75,7 +174,9 @@ export default function BudgetsScreen() {
               </View>
 
               <View style={styles.budgetBottom}>
-                <Text style={styles.amountText}>${item.spent} / ${item.budget}</Text>
+                <Text style={styles.amountText}>
+                  ${spent.toFixed(0)} / ${item.budget}
+                </Text>
 
                 <Ionicons
                   name={overBudget ? "warning-outline" : "checkmark-circle-outline"}
@@ -92,6 +193,17 @@ export default function BudgetsScreen() {
 }
 
 const styles = StyleSheet.create({
+  loadingScreen: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    color: COLORS.muted,
+    fontWeight: "700",
+    marginTop: 10,
+  },
   screen: {
     flex: 1,
     backgroundColor: COLORS.background,

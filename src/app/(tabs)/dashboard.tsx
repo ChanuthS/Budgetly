@@ -1,7 +1,16 @@
 import { COLORS } from "@/constants/colors";
+import { getProfile } from "@/services/profileService";
+import { getTransactions, Transaction } from "@/services/transactionService";
 import { Ionicons } from "@expo/vector-icons";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
-
+import { useFocusEffect } from "expo-router";
+import { useCallback, useState } from "react";
+import {
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
 const categories = [
   { emoji: "🛒", name: "Groceries", spent: 320, budget: 400, color: COLORS.primary },
@@ -10,20 +19,81 @@ const categories = [
   { emoji: "🎭", name: "Entertainment", spent: 145, budget: 200, color: COLORS.primary },
 ];
 
-const transactions = [
-  { emoji: "🛒", title: "Whole Foods", subtitle: "Groceries · Today", amount: "$84.32" },
-  { emoji: "☕", title: "Blue Bottle Coffee", subtitle: "Dining · Today", amount: "$6.50" },
-  { emoji: "💼", title: "Salary Deposit", subtitle: "Income · Jun 15", amount: "+$3200.00", income: true },
-  { emoji: "🎬", title: "Netflix", subtitle: "Subscriptions · Jun 14", amount: "$15.99" },
-];
+function formatCurrency(amount: number) {
+  return `$${amount.toFixed(2)}`;
+}
+
+function formatTransactionAmount(amount: number, type: "income" | "expense") {
+  return type === "income" ? `+$${amount.toFixed(2)}` : `$${amount.toFixed(2)}`;
+}
+
+function formatDate(dateString: string) {
+  const date = new Date(dateString);
+
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+}
 
 export default function DashboardScreen() {
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [profileName, setProfileName] = useState("Budgetly User");
+  const [loading, setLoading] = useState(true);
+
+  async function loadDashboard() {
+    try {
+      setLoading(true);
+
+      const [transactionData, profileData] = await Promise.all([
+        getTransactions(),
+        getProfile(),
+      ]);
+
+      setTransactions(transactionData);
+
+      if (profileData?.full_name) {
+        setProfileName(profileData.full_name);
+      }
+    } catch (error) {
+      console.log("Dashboard load error:", error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useFocusEffect(
+    useCallback(() => {
+      loadDashboard();
+    }, [])
+  );
+
+  const totalIncome = transactions
+    .filter((item) => item.type === "income")
+    .reduce((sum, item) => sum + Number(item.amount), 0);
+
+  const totalExpenses = transactions
+    .filter((item) => item.type === "expense")
+    .reduce((sum, item) => sum + Number(item.amount), 0);
+
+  const totalBalance = totalIncome - totalExpenses;
+  const recentTransactions = transactions.slice(0, 4);
+
+  if (loading) {
+    return (
+      <View style={styles.loadingScreen}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={styles.loadingText}>Loading dashboard...</Text>
+      </View>
+    );
+  }
+
   return (
     <ScrollView style={styles.screen} showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
         <View>
           <Text style={styles.greeting}>Good morning,</Text>
-          <Text style={styles.name}>Sarah Chen</Text>
+          <Text style={styles.name}>{profileName}</Text>
         </View>
 
         <View style={styles.bellButton}>
@@ -33,7 +103,7 @@ export default function DashboardScreen() {
 
         <View style={styles.balanceCard}>
           <Text style={styles.balanceLabel}>TOTAL BALANCE</Text>
-          <Text style={styles.balanceAmount}>$8,432.50</Text>
+          <Text style={styles.balanceAmount}>{formatCurrency(totalBalance)}</Text>
 
           <View style={styles.balanceRow}>
             <View style={styles.balanceItem}>
@@ -42,7 +112,9 @@ export default function DashboardScreen() {
               </View>
               <View>
                 <Text style={styles.balanceSubLabel}>Income</Text>
-                <Text style={styles.balanceSubAmount}>$3,200</Text>
+                <Text style={styles.balanceSubAmount}>
+                  {formatCurrency(totalIncome)}
+                </Text>
               </View>
             </View>
 
@@ -54,7 +126,9 @@ export default function DashboardScreen() {
               </View>
               <View>
                 <Text style={styles.balanceSubLabel}>Spent</Text>
-                <Text style={styles.balanceSubAmount}>$1,847</Text>
+                <Text style={styles.balanceSubAmount}>
+                  {formatCurrency(totalExpenses)}
+                </Text>
               </View>
             </View>
           </View>
@@ -64,15 +138,20 @@ export default function DashboardScreen() {
       <View style={styles.content}>
         <View style={styles.budgetCard}>
           <View style={styles.ring}>
-            <Text style={styles.ringText}>68%</Text>
+            <Text style={styles.ringText}>
+              {totalExpenses > 0 ? "68%" : "0%"}
+            </Text>
           </View>
 
           <View>
             <Text style={styles.cardLabel}>Monthly Budget</Text>
             <Text style={styles.budgetAmount}>
-              $1,847 <Text style={styles.budgetTotal}>/ $2,700</Text>
+              {formatCurrency(totalExpenses)}{" "}
+              <Text style={styles.budgetTotal}>/ $2,700</Text>
             </Text>
-            <Text style={styles.onTrack}>● 68% used — on track</Text>
+            <Text style={styles.onTrack}>
+              ● {totalExpenses > 0 ? "Budget tracking active" : "No spending yet"}
+            </Text>
           </View>
         </View>
 
@@ -118,35 +197,59 @@ export default function DashboardScreen() {
           <Text style={styles.seeAll}>See all</Text>
         </View>
 
-        <View style={styles.transactionList}>
-          {transactions.map((item) => (
-            <View key={item.title} style={styles.transactionRow}>
-              <View style={styles.transactionIcon}>
-                <Text>{item.emoji}</Text>
-              </View>
+        {recentTransactions.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>No recent transactions</Text>
+            <Text style={styles.emptyText}>
+              Add your first transaction from the Add tab.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.transactionList}>
+            {recentTransactions.map((item) => (
+              <View key={item.id} style={styles.transactionRow}>
+                <View style={styles.transactionIcon}>
+                  <Text>{item.emoji || "💰"}</Text>
+                </View>
 
-              <View style={styles.transactionInfo}>
-                <Text style={styles.transactionTitle}>{item.title}</Text>
-                <Text style={styles.transactionSubtitle}>{item.subtitle}</Text>
-              </View>
+                <View style={styles.transactionInfo}>
+                  <Text style={styles.transactionTitle}>
+                    {item.description || item.category}
+                  </Text>
+                  <Text style={styles.transactionSubtitle}>
+                    {item.category} · {formatDate(item.transaction_date)}
+                  </Text>
+                </View>
 
-              <Text
-                style={[
-                  styles.transactionAmount,
-                  item.income && { color: COLORS.green },
-                ]}
-              >
-                {item.amount}
-              </Text>
-            </View>
-          ))}
-        </View>
+                <Text
+                  style={[
+                    styles.transactionAmount,
+                    item.type === "income" && { color: COLORS.green },
+                  ]}
+                >
+                  {formatTransactionAmount(Number(item.amount), item.type)}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
       </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+  loadingScreen: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    color: COLORS.muted,
+    fontWeight: "700",
+    marginTop: 10,
+  },
   screen: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -384,5 +487,21 @@ const styles = StyleSheet.create({
   transactionAmount: {
     fontWeight: "800",
     color: COLORS.text,
+  },
+  emptyCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 20,
+    padding: 20,
+    alignItems: "center",
+  },
+  emptyTitle: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  emptyText: {
+    color: COLORS.muted,
+    textAlign: "center",
+    marginTop: 6,
   },
 });

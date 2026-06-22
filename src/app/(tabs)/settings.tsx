@@ -1,11 +1,23 @@
 import { COLORS } from "@/constants/colors";
+import { signOut } from "@/services/authService";
+import { getProfile } from "@/services/profileService";
 import { Ionicons } from "@expo/vector-icons";
-import { ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from "react-native";
-
+import { router, useFocusEffect } from "expo-router";
+import { useCallback, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 const accountItems = [
-  { icon: "person-outline", label: "Profile", value: "Sarah Chen" },
-  { icon: "card-outline", label: "Connected Accounts", value: "3 linked" },
+  { icon: "person-outline", label: "Profile", value: "View profile" },
+  { icon: "card-outline", label: "Connected Accounts", value: "0 linked" },
 ];
 
 const preferenceItems = [
@@ -19,7 +31,74 @@ const dataItems = [
   { icon: "lock-closed-outline", label: "Privacy & Security", value: "" },
 ];
 
+type Profile = {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  created_at: string;
+};
+
+function getInitials(name?: string | null, email?: string | null) {
+  if (name) {
+    return name
+      .split(" ")
+      .map((part) => part[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase();
+  }
+
+  if (email) {
+    return email.slice(0, 2).toUpperCase();
+  }
+
+  return "U";
+}
+
 export default function SettingsScreen() {
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  async function loadProfile() {
+    try {
+      setLoading(true);
+      const data = await getProfile();
+      setProfile(data);
+    } catch (error: any) {
+      Alert.alert("Profile error", error.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleLogout() {
+    try {
+      await signOut();
+      router.replace("/login");
+    } catch (error: any) {
+      Alert.alert("Logout failed", error.message);
+    }
+  }
+
+  useFocusEffect(
+    useCallback(() => {
+      loadProfile();
+    }, [])
+  );
+
+  const displayName = profile?.full_name || "Budgetly User";
+  const displayEmail = profile?.email || "No email available";
+  const initials = getInitials(profile?.full_name, profile?.email);
+
+  if (loading) {
+    return (
+      <View style={styles.loadingScreen}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={styles.loadingText}>Loading settings...</Text>
+      </View>
+    );
+  }
+
   return (
     <ScrollView style={styles.screen} showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
@@ -28,33 +107,33 @@ export default function SettingsScreen() {
 
       <View style={styles.profileCard}>
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>SC</Text>
+          <Text style={styles.avatarText}>{initials}</Text>
         </View>
 
         <View style={styles.profileInfo}>
-          <Text style={styles.profileName}>Sarah Chen</Text>
-          <Text style={styles.profileEmail}>sarah.chen@email.com</Text>
+          <Text style={styles.profileName}>{displayName}</Text>
+          <Text style={styles.profileEmail}>{displayEmail}</Text>
         </View>
 
         <View style={styles.proBadge}>
-          <Text style={styles.proText}>PRO</Text>
+          <Text style={styles.proText}>FREE</Text>
         </View>
       </View>
 
       <View style={styles.statsRow}>
         <View style={styles.statCard}>
-          <Text style={styles.statValue}>248</Text>
-          <Text style={styles.statLabel}>Transactions</Text>
+          <Text style={styles.statValue}>Active</Text>
+          <Text style={styles.statLabel}>Account</Text>
         </View>
 
         <View style={styles.statCard}>
-          <Text style={styles.statValue}>8</Text>
-          <Text style={styles.statLabel}>Months tracked</Text>
+          <Text style={styles.statValue}>USD</Text>
+          <Text style={styles.statLabel}>Currency</Text>
         </View>
 
         <View style={styles.statCard}>
-          <Text style={styles.statValue}>$4,210</Text>
-          <Text style={styles.statLabel}>Saved</Text>
+          <Text style={styles.statValue}>Secure</Text>
+          <Text style={styles.statLabel}>Auth</Text>
         </View>
       </View>
 
@@ -62,7 +141,7 @@ export default function SettingsScreen() {
       <SettingsSection title="Preferences" items={preferenceItems} />
       <SettingsSection title="Data" items={dataItems} />
 
-      <TouchableOpacity style={styles.logoutButton}>
+      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
         <Ionicons name="log-out-outline" size={20} color="#EF4444" />
         <Text style={styles.logoutText}>Log Out</Text>
       </TouchableOpacity>
@@ -97,7 +176,11 @@ function SettingsSection({
           >
             <View style={styles.settingLeft}>
               <View style={styles.settingIcon}>
-                <Ionicons name={item.icon as any} size={20} color={COLORS.primary} />
+                <Ionicons
+                  name={item.icon as any}
+                  size={20}
+                  color={COLORS.primary}
+                />
               </View>
 
               <Text style={styles.settingLabel}>{item.label}</Text>
@@ -111,7 +194,11 @@ function SettingsSection({
               )}
 
               {!item.switch && (
-                <Ionicons name="chevron-forward" size={18} color={COLORS.muted} />
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={COLORS.muted}
+                />
               )}
             </View>
           </View>
@@ -122,6 +209,17 @@ function SettingsSection({
 }
 
 const styles = StyleSheet.create({
+  loadingScreen: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    color: COLORS.muted,
+    fontWeight: "700",
+    marginTop: 10,
+  },
   screen: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -194,7 +292,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   statValue: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "800",
     color: COLORS.text,
   },

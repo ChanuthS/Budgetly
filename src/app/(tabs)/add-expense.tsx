@@ -1,6 +1,23 @@
 import { COLORS } from "@/constants/colors";
+import { uploadReceipt } from "@/services/receiptService";
+import { createTransaction, TransactionType } from "@/services/transactionService";
 import { Ionicons } from "@expo/vector-icons";
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import * as ImagePicker from "expo-image-picker";
+import { router } from "expo-router";
+import { useState } from "react";
+import {
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 const categories = [
   { emoji: "🛒", name: "Groceries" },
@@ -14,86 +31,248 @@ const categories = [
 ];
 
 export default function AddExpenseScreen() {
+  const [type, setType] = useState<TransactionType>("expense");
+  const [amount, setAmount] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState(categories[0]);
+  const [description, setDescription] = useState("");
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [receiptUri, setReceiptUri] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  function formatDate(date: Date) {
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  }
+
+  async function pickReceipt() {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permission.granted) {
+      Alert.alert(
+        "Permission needed",
+        "Please allow photo library access to attach a receipt."
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      quality: 0.7,
+      allowsEditing: true,
+    });
+
+    if (!result.canceled) {
+      setReceiptUri(result.assets[0].uri);
+    }
+  }
+
+  async function handleSave() {
+    const numericAmount = Number(amount);
+
+    if (!amount || numericAmount <= 0) {
+      Alert.alert("Invalid amount", "Please enter an amount greater than 0.");
+      return;
+    }
+
+    if (!description.trim()) {
+      Alert.alert("Missing description", "Please enter a short description.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      let receiptUrl: string | null = null;
+
+      if (receiptUri) {
+        receiptUrl = await uploadReceipt(receiptUri);
+      }
+
+      await createTransaction({
+        amount: numericAmount,
+        type,
+        category: selectedCategory.name,
+        emoji: selectedCategory.emoji,
+        description: description.trim(),
+        transactionDate: selectedDate.toISOString().split("T")[0],
+        receiptUrl,
+      });
+
+      setAmount("");
+      setDescription("");
+      setType("expense");
+      setSelectedCategory(categories[0]);
+      setSelectedDate(new Date());
+      setReceiptUri(null);
+
+      Alert.alert("Success", "Transaction saved.");
+      router.push("/(tabs)/transactions");
+    } catch (error: any) {
+      console.log("Save Error:", error);
+
+      Alert.alert("Save failed", error?.message || JSON.stringify(error));
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
-    <ScrollView style={styles.screen} showsVerticalScrollIndicator={false}>
-      <View style={styles.header}>
-        <Text style={styles.title}>New Entry</Text>
+    <KeyboardAvoidingView
+      style={styles.wrapper}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      <ScrollView style={styles.screen} showsVerticalScrollIndicator={false}>
+        <View style={styles.header}>
+          <Text style={styles.title}>New Entry</Text>
 
-        <TouchableOpacity style={styles.saveButton}>
-          <Text style={styles.saveText}>Save</Text>
+          <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+            <Text style={styles.saveText}>{loading ? "Saving..." : "Save"}</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.typeSwitch}>
+          <TouchableOpacity
+            style={[styles.typeButton, type === "expense" && styles.activeType]}
+            onPress={() => setType("expense")}
+          >
+            <Text style={type === "expense" ? styles.activeTypeText : styles.typeText}>
+              expense
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.typeButton, type === "income" && styles.activeType]}
+            onPress={() => setType("income")}
+          >
+            <Text style={type === "income" ? styles.activeTypeText : styles.typeText}>
+              income
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.amountCard}>
+          <Text style={styles.label}>Amount</Text>
+
+          <View style={styles.amountInputRow}>
+            <Text style={styles.dollarSign}>$</Text>
+            <TextInput
+              value={amount}
+              onChangeText={setAmount}
+              placeholder="0.00"
+              placeholderTextColor={COLORS.muted}
+              keyboardType="decimal-pad"
+              style={styles.amountInput}
+            />
+          </View>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.label}>Category</Text>
+
+          <View style={styles.categoryGrid}>
+            {categories.map((item) => {
+              const selected = selectedCategory.name === item.name;
+
+              return (
+                <TouchableOpacity
+                  key={item.name}
+                  style={[styles.categoryPill, selected && styles.selectedCategory]}
+                  onPress={() => setSelectedCategory(item)}
+                >
+                  <Text style={styles.categoryText}>
+                    {item.emoji} {item.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.label}>Description</Text>
+          <TextInput
+            placeholder="Whole Foods Market"
+            placeholderTextColor={COLORS.muted}
+            value={description}
+            onChangeText={setDescription}
+            style={styles.input}
+          />
+        </View>
+
+        <TouchableOpacity
+          style={styles.cardRow}
+          onPress={() => setShowDatePicker(true)}
+        >
+          <View>
+            <Text style={styles.label}>Date</Text>
+            <Text style={styles.rowValue}>{formatDate(selectedDate)}</Text>
+          </View>
+
+          <Ionicons name="calendar-outline" size={22} color={COLORS.muted} />
         </TouchableOpacity>
-      </View>
 
-      <View style={styles.typeSwitch}>
-        <TouchableOpacity style={[styles.typeButton, styles.activeType]}>
-          <Text style={styles.activeTypeText}>expense</Text>
+        {showDatePicker && (
+          <DateTimePicker
+            value={selectedDate}
+            mode="date"
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            onChange={(event, date) => {
+              setShowDatePicker(false);
+
+              if (date) {
+                setSelectedDate(date);
+              }
+            }}
+          />
+        )}
+
+        <TouchableOpacity style={styles.cardRow} onPress={pickReceipt}>
+          <View>
+            <Text style={styles.label}>Receipt</Text>
+            <Text style={styles.rowValue}>
+              {receiptUri ? "Receipt attached" : "Attach photo"}
+            </Text>
+          </View>
+
+          <Ionicons name="camera-outline" size={22} color={COLORS.muted} />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.typeButton}>
-          <Text style={styles.typeText}>income</Text>
-        </TouchableOpacity>
-      </View>
+        {receiptUri && (
+          <View style={styles.previewCard}>
+            <Image source={{ uri: receiptUri }} style={styles.receiptPreview} />
 
-      <View style={styles.amountCard}>
-        <Text style={styles.label}>Amount</Text>
-        <Text style={styles.amount}>$0</Text>
-      </View>
-
-      <View style={styles.card}>
-        <Text style={styles.label}>Category</Text>
-
-        <View style={styles.categoryGrid}>
-          {categories.map((item, index) => (
             <TouchableOpacity
-              key={item.name}
-              style={[
-                styles.categoryPill,
-                index === 0 && styles.selectedCategory,
-              ]}
+              style={styles.removeReceiptButton}
+              onPress={() => setReceiptUri(null)}
             >
-              <Text style={styles.categoryText}>
-                {item.emoji} {item.name}
-              </Text>
+              <Ionicons name="close" size={18} color="#FFFFFF" />
             </TouchableOpacity>
-          ))}
-        </View>
-      </View>
+          </View>
+        )}
 
-      <View style={styles.card}>
-        <Text style={styles.label}>Description</Text>
-        <TextInput
-          placeholder="Whole Foods Market"
-          placeholderTextColor={COLORS.text}
-          style={styles.input}
-        />
-      </View>
-
-      <View style={styles.cardRow}>
-        <View>
-          <Text style={styles.label}>Date</Text>
-          <Text style={styles.rowValue}>Jun 16, 2026</Text>
-        </View>
-
-        <Ionicons name="calendar-outline" size={22} color={COLORS.muted} />
-      </View>
-
-      <View style={styles.cardRow}>
-        <View>
-          <Text style={styles.label}>Receipt</Text>
-          <Text style={styles.rowValue}>Attach photo</Text>
-        </View>
-
-        <Ionicons name="camera-outline" size={22} color={COLORS.muted} />
-      </View>
-
-      <TouchableOpacity style={styles.primaryButton}>
-        <Text style={styles.primaryButtonText}>Save Transaction</Text>
-      </TouchableOpacity>
-    </ScrollView>
+        <TouchableOpacity
+          style={[styles.primaryButton, loading && styles.disabledButton]}
+          onPress={handleSave}
+          disabled={loading}
+        >
+          <Text style={styles.primaryButtonText}>
+            {loading ? "Saving..." : "Save Transaction"}
+          </Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  wrapper: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
   screen: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -158,10 +337,22 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginBottom: 8,
   },
-  amount: {
-    fontSize: 54,
+  amountInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  dollarSign: {
+    fontSize: 52,
     fontWeight: "800",
     color: COLORS.text,
+    marginRight: 4,
+  },
+  amountInput: {
+    fontSize: 52,
+    fontWeight: "800",
+    color: COLORS.text,
+    minWidth: 140,
+    textAlign: "center",
   },
   card: {
     backgroundColor: COLORS.card,
@@ -209,6 +400,29 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: COLORS.text,
   },
+  previewCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 22,
+    padding: 12,
+    marginBottom: 16,
+    position: "relative",
+  },
+  receiptPreview: {
+    width: "100%",
+    height: 180,
+    borderRadius: 16,
+  },
+  removeReceiptButton: {
+    position: "absolute",
+    top: 20,
+    right: 20,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "#EF4444",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   primaryButton: {
     backgroundColor: COLORS.primary,
     borderRadius: 20,
@@ -216,6 +430,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 8,
     marginBottom: 120,
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
   primaryButtonText: {
     color: "#FFFFFF",
