@@ -1,14 +1,16 @@
-import { signIn } from "@/services/authService";
+import MoneyRainTransition from "@/components/MoneyRainTransition";
+import { signIn, signInWithGoogle } from "@/services/authService";
+import { Ionicons } from "@expo/vector-icons";
 import { Link, router } from "expo-router";
 import { useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 const COLORS = {
@@ -24,6 +26,12 @@ export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [showMoneyRain, setShowMoneyRain] = useState(false);
+
+  function goToDashboardWithAnimation() {
+    setShowMoneyRain(true);
+  }
 
   async function handleLogin() {
     if (!email || !password) {
@@ -34,11 +42,23 @@ export default function LoginScreen() {
     try {
       setLoading(true);
       await signIn(email.trim(), password);
-      router.replace("/(tabs)/dashboard");
+      goToDashboardWithAnimation();
     } catch (error: any) {
       Alert.alert("Login failed", error.message);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleGoogleLogin() {
+    try {
+      setGoogleLoading(true);
+      await signInWithGoogle();
+      goToDashboardWithAnimation();
+    } catch (error: any) {
+      Alert.alert("Google sign-in failed", error.message);
+    } finally {
+      setGoogleLoading(false);
     }
   }
 
@@ -48,6 +68,27 @@ export default function LoginScreen() {
       <Text style={styles.subtitle}>Welcome back. Log in to continue.</Text>
 
       <View style={styles.card}>
+        <TouchableOpacity
+          style={styles.googleButton}
+          onPress={handleGoogleLogin}
+          disabled={googleLoading || loading || showMoneyRain}
+        >
+          {googleLoading ? (
+            <ActivityIndicator color={COLORS.text} />
+          ) : (
+            <>
+              <Ionicons name="logo-google" size={20} color={COLORS.text} />
+              <Text style={styles.googleButtonText}>Continue with Google</Text>
+            </>
+          )}
+        </TouchableOpacity>
+
+        <View style={styles.dividerRow}>
+          <View style={styles.dividerLine} />
+          <Text style={styles.dividerText}>or</Text>
+          <View style={styles.dividerLine} />
+        </View>
+
         <Text style={styles.label}>Email</Text>
         <TextInput
           placeholder="you@example.com"
@@ -70,9 +111,12 @@ export default function LoginScreen() {
         />
 
         <TouchableOpacity
-          style={styles.button}
+          style={[
+            styles.button,
+            (loading || googleLoading || showMoneyRain) && styles.disabledButton,
+          ]}
           onPress={handleLogin}
-          disabled={loading}
+          disabled={loading || googleLoading || showMoneyRain}
         >
           {loading ? (
             <ActivityIndicator color="#FFFFFF" />
@@ -85,6 +129,12 @@ export default function LoginScreen() {
           New to Budgetly? Create an account
         </Link>
       </View>
+
+      {showMoneyRain && (
+        <MoneyRainTransition
+          onFinish={() => router.replace("/(tabs)/dashboard")}
+        />
+      )}
     </View>
   );
 }
@@ -113,6 +163,37 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     padding: 22,
   },
+  googleButton: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    paddingVertical: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 10,
+    backgroundColor: "#FFFFFF",
+  },
+  googleButtonText: {
+    color: COLORS.text,
+    fontWeight: "800",
+    fontSize: 15,
+  },
+  dividerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 20,
+    gap: 10,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: COLORS.border,
+  },
+  dividerText: {
+    color: COLORS.muted,
+    fontWeight: "700",
+  },
   label: {
     color: COLORS.text,
     fontWeight: "800",
@@ -134,6 +215,9 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: "center",
     marginTop: 22,
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
   buttonText: {
     color: "#FFFFFF",

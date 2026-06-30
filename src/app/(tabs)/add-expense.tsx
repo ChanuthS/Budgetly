@@ -1,4 +1,5 @@
 import { COLORS } from "@/constants/colors";
+import { extractReceiptText, parseReceiptText } from "@/services/ocrService";
 import { uploadReceipt } from "@/services/receiptService";
 import { createTransaction, TransactionType } from "@/services/transactionService";
 import { Ionicons } from "@expo/vector-icons";
@@ -39,6 +40,7 @@ export default function AddExpenseScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [receiptUri, setReceiptUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [scanningReceipt, setScanningReceipt] = useState(false);
 
   function formatDate(date: Date) {
     return date.toLocaleDateString("en-US", {
@@ -66,7 +68,34 @@ export default function AddExpenseScreen() {
     });
 
     if (!result.canceled) {
-      setReceiptUri(result.assets[0].uri);
+      const uri = result.assets[0].uri;
+      setReceiptUri(uri);
+
+      try {
+        setScanningReceipt(true);
+
+        const rawText = await extractReceiptText(uri);
+        const parsed = parseReceiptText(rawText);
+
+        if (parsed.amount) {
+          setAmount(parsed.amount);
+        }
+
+        if (parsed.merchant) {
+          setDescription(parsed.merchant);
+        }
+
+        Alert.alert("Receipt scanned", "Budgetly filled in what it could.");
+      } catch (error: any) {
+        console.log("OCR ERROR:", error);
+
+        Alert.alert(
+          "Receipt attached",
+          "The receipt was attached, but OCR could not read it. You can still enter the details manually."
+        );
+      } finally {
+        setScanningReceipt(false);
+      }
     }
   }
 
@@ -113,12 +142,13 @@ export default function AddExpenseScreen() {
       router.push("/(tabs)/transactions");
     } catch (error: any) {
       console.log("Save Error:", error);
-
       Alert.alert("Save failed", error?.message || JSON.stringify(error));
     } finally {
       setLoading(false);
     }
   }
+
+  const isBusy = loading || scanningReceipt;
 
   return (
     <KeyboardAvoidingView
@@ -129,8 +159,14 @@ export default function AddExpenseScreen() {
         <View style={styles.header}>
           <Text style={styles.title}>New Entry</Text>
 
-          <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-            <Text style={styles.saveText}>{loading ? "Saving..." : "Save"}</Text>
+          <TouchableOpacity
+            style={[styles.saveButton, isBusy && styles.disabledButton]}
+            onPress={handleSave}
+            disabled={isBusy}
+          >
+            <Text style={styles.saveText}>
+              {loading ? "Saving..." : scanningReceipt ? "Scanning..." : "Save"}
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -138,6 +174,7 @@ export default function AddExpenseScreen() {
           <TouchableOpacity
             style={[styles.typeButton, type === "expense" && styles.activeType]}
             onPress={() => setType("expense")}
+            disabled={isBusy}
           >
             <Text style={type === "expense" ? styles.activeTypeText : styles.typeText}>
               expense
@@ -147,6 +184,7 @@ export default function AddExpenseScreen() {
           <TouchableOpacity
             style={[styles.typeButton, type === "income" && styles.activeType]}
             onPress={() => setType("income")}
+            disabled={isBusy}
           >
             <Text style={type === "income" ? styles.activeTypeText : styles.typeText}>
               income
@@ -166,6 +204,7 @@ export default function AddExpenseScreen() {
               placeholderTextColor={COLORS.muted}
               keyboardType="decimal-pad"
               style={styles.amountInput}
+              editable={!isBusy}
             />
           </View>
         </View>
@@ -182,6 +221,7 @@ export default function AddExpenseScreen() {
                   key={item.name}
                   style={[styles.categoryPill, selected && styles.selectedCategory]}
                   onPress={() => setSelectedCategory(item)}
+                  disabled={isBusy}
                 >
                   <Text style={styles.categoryText}>
                     {item.emoji} {item.name}
@@ -200,12 +240,14 @@ export default function AddExpenseScreen() {
             value={description}
             onChangeText={setDescription}
             style={styles.input}
+            editable={!isBusy}
           />
         </View>
 
         <TouchableOpacity
           style={styles.cardRow}
           onPress={() => setShowDatePicker(true)}
+          disabled={isBusy}
         >
           <View>
             <Text style={styles.label}>Date</Text>
@@ -230,11 +272,19 @@ export default function AddExpenseScreen() {
           />
         )}
 
-        <TouchableOpacity style={styles.cardRow} onPress={pickReceipt}>
+        <TouchableOpacity
+          style={styles.cardRow}
+          onPress={pickReceipt}
+          disabled={isBusy}
+        >
           <View>
             <Text style={styles.label}>Receipt</Text>
             <Text style={styles.rowValue}>
-              {receiptUri ? "Receipt attached" : "Attach photo"}
+              {scanningReceipt
+                ? "Scanning receipt..."
+                : receiptUri
+                  ? "Receipt attached"
+                  : "Attach photo"}
             </Text>
           </View>
 
@@ -248,6 +298,7 @@ export default function AddExpenseScreen() {
             <TouchableOpacity
               style={styles.removeReceiptButton}
               onPress={() => setReceiptUri(null)}
+              disabled={isBusy}
             >
               <Ionicons name="close" size={18} color="#FFFFFF" />
             </TouchableOpacity>
@@ -255,12 +306,16 @@ export default function AddExpenseScreen() {
         )}
 
         <TouchableOpacity
-          style={[styles.primaryButton, loading && styles.disabledButton]}
+          style={[styles.primaryButton, isBusy && styles.disabledButton]}
           onPress={handleSave}
-          disabled={loading}
+          disabled={isBusy}
         >
           <Text style={styles.primaryButtonText}>
-            {loading ? "Saving..." : "Save Transaction"}
+            {loading
+              ? "Saving..."
+              : scanningReceipt
+                ? "Scanning receipt..."
+                : "Save Transaction"}
           </Text>
         </TouchableOpacity>
       </ScrollView>
