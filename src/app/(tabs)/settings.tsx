@@ -1,6 +1,6 @@
 import { useAppTheme } from "@/context/ThemeContext";
 import { signOut } from "@/services/authService";
-import { connectSandboxBank } from "@/services/plaidService";
+import { connectSandboxBank, syncBankTransactions } from "@/services/plaidService";
 import { getProfile } from "@/services/profileService";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
@@ -33,9 +33,23 @@ const accountItems = [
 ];
 
 const preferenceItems = [
-  { icon: "notifications-outline", label: "Notifications", value: "On" },
-  { icon: "moon-outline", label: "Dark Mode", value: "Off", switch: true },
-  { icon: "cash-outline", label: "Currency", value: "USD ($)" },
+  {
+    icon: "notifications-outline",
+    label: "Notifications",
+    value: "Manage",
+    route: "/notifications",
+  },
+  {
+    icon: "moon-outline",
+    label: "Dark Mode",
+    value: "Off",
+    switch: true,
+  },
+  {
+    icon: "cash-outline",
+    label: "Currency",
+    value: "USD ($)",
+  },
 ];
 
 const dataItems = [
@@ -90,17 +104,32 @@ export default function SettingsScreen() {
   async function handleConnectBank() {
     try {
       setConnectingBank(true);
-
+  
+      console.log("STEP 1");
+  
       const result = await connectSandboxBank();
-
+  
+      console.log("STEP 2", result);
+  
       setBankConnected(true);
-
+  
+      const syncResult = await syncBankTransactions();
+  
+      console.log("STEP 3", syncResult);
+  
       Alert.alert(
         "Bank connected",
-        `${result.institution_name} was connected successfully.`
+        `${result.institution_name}
+  
+  ${syncResult.imported_count} transactions imported.`
       );
     } catch (error: any) {
-      Alert.alert("Connection failed", error.message);
+      console.log("BANK ERROR:", error);
+  
+      Alert.alert(
+        "Connection failed",
+        error?.message || JSON.stringify(error)
+      );
     } finally {
       setConnectingBank(false);
     }

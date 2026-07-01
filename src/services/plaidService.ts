@@ -65,3 +65,33 @@ export async function connectSandboxBank() {
     plaid_item_id: string;
   };
 }
+
+export async function syncBankTransactions() {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+  
+    if (!session) {
+      throw new Error("User not authenticated");
+    }
+  
+    const response = await fetch(
+      `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/sync-bank-transactions`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+  
+    const data = await response.json();
+  
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to sync bank transactions.");
+    }
+  
+    return data;
+  }
