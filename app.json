@@ -17,7 +17,8 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.chanuths.Budgetly"
     },
     "web": {
       "output": "static",
@@ -35,6 +36,14 @@
           }
         }
       ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26
+          }
+        }
+      ],
       "expo-status-bar",
       "@react-native-community/datetimepicker",
       "expo-sharing",
@@ -43,6 +52,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "7d6c848c-0e98-4e15-a367-27c9f26643c1"
+      }
     }
   }
 }

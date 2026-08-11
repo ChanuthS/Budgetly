@@ -1,12 +1,16 @@
+import { IconBadge, LoadingState } from "@/components/common";
 import { useAppTheme } from "@/context/ThemeContext";
 import { signOut } from "@/services/authService";
-import { connectSandboxBank, syncBankTransactions } from "@/services/plaidService";
+import {
+  createPlaidLinkToken,
+  exchangePlaidPublicToken,
+  syncBankTransactions,
+} from "@/services/plaidService";
 import { getProfile } from "@/services/profileService";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   Image,
   ScrollView,
@@ -16,6 +20,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { createPlaidLinkSession } from "react-native-plaid-link-sdk";
 
 const accountItems = [
   {
@@ -27,7 +32,7 @@ const accountItems = [
   {
     icon: "card-outline",
     label: "Connected Accounts",
-    value: "Connect sandbox",
+    value: "Connect bank",
     action: "connectBank",
   },
 ];
@@ -104,34 +109,52 @@ export default function SettingsScreen() {
   async function handleConnectBank() {
     try {
       setConnectingBank(true);
-  
-      console.log("STEP 1");
-  
-      const result = await connectSandboxBank();
-  
-      console.log("STEP 2", result);
-  
-      setBankConnected(true);
-  
-      const syncResult = await syncBankTransactions();
-  
-      console.log("STEP 3", syncResult);
-  
-      Alert.alert(
-        "Bank connected",
-        `${result.institution_name}
-  
-  ${syncResult.imported_count} transactions imported.`
-      );
+
+      const linkToken = await createPlaidLinkToken();
+
+      const session = await createPlaidLinkSession({
+        token: linkToken,
+
+        onSuccess: async (success: any) => {
+          try {
+            const publicToken = success.publicToken;
+
+            if (!publicToken) {
+              throw new Error("Plaid did not return a public token.");
+            }
+
+            const exchangeResult = await exchangePlaidPublicToken(publicToken);
+            const syncResult = await syncBankTransactions();
+
+            setBankConnected(true);
+
+            Alert.alert(
+              "Bank connected",
+              `${exchangeResult.institution_name} connected successfully.
+
+${syncResult.imported_count} transactions imported into Budgetly.`
+            );
+          } catch (error: any) {
+            Alert.alert("Bank sync failed", error.message);
+          } finally {
+            setConnectingBank(false);
+          }
+        },
+
+        onExit: (exit: any) => {
+          console.log("PLAID EXIT:", exit);
+          setConnectingBank(false);
+        },
+
+        onEvent: (event: any) => {
+          console.log("PLAID EVENT:", event);
+        },
+      });
+
+      await session.open();
     } catch (error: any) {
-      console.log("BANK ERROR:", error);
-  
-      Alert.alert(
-        "Connection failed",
-        error?.message || JSON.stringify(error)
-      );
-    } finally {
       setConnectingBank(false);
+      Alert.alert("Connection failed", error.message);
     }
   }
 
@@ -159,10 +182,10 @@ export default function SettingsScreen() {
       return {
         ...item,
         value: connectingBank
-          ? "Connecting..."
+          ? "Opening Plaid..."
           : bankConnected
-            ? "Sandbox linked"
-            : "Connect sandbox",
+            ? "Bank linked"
+            : "Connect bank",
       };
     }
 
@@ -170,12 +193,7 @@ export default function SettingsScreen() {
   });
 
   if (loading) {
-    return (
-      <View style={styles.loadingScreen}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>Loading settings...</Text>
-      </View>
-    );
+    return <LoadingState message="Loading settings..." />;
   }
 
   return (
@@ -187,10 +205,7 @@ export default function SettingsScreen() {
       <View style={styles.profileCard}>
         <View style={styles.avatar}>
           {profile?.avatar_url ? (
-            <Image
-              source={{ uri: profile.avatar_url }}
-              style={styles.avatarImage}
-            />
+            <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
           ) : (
             <Text style={styles.avatarText}>{initials}</Text>
           )}
@@ -241,12 +256,7 @@ export default function SettingsScreen() {
         toggleTheme={toggleTheme}
       />
 
-      <SettingsSection
-        title="Data"
-        items={dataItems}
-        colors={colors}
-        styles={styles}
-      />
+      <SettingsSection title="Data" items={dataItems} colors={colors} styles={styles} />
 
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
         <Ionicons name="log-out-outline" size={20} color="#EF4444" />
@@ -308,13 +318,12 @@ function SettingsSection({
               }
             >
               <View style={styles.settingLeft}>
-                <View style={styles.settingIcon}>
-                  <Ionicons
-                    name={item.icon as any}
-                    size={20}
-                    color={colors.primary}
-                  />
-                </View>
+                <IconBadge
+                  name={item.icon as keyof typeof Ionicons.glyphMap}
+                  size={38}
+                  iconSize={20}
+                  backgroundColor={colors.background}
+                />
 
                 <Text style={styles.settingLabel}>{item.label}</Text>
               </View>
@@ -332,11 +341,7 @@ function SettingsSection({
                 )}
 
                 {!item.switch && (
-                  <Ionicons
-                    name="chevron-forward"
-                    size={18}
-                    color={colors.muted}
-                  />
+                  <Ionicons name="chevron-forward" size={18} color={colors.muted} />
                 )}
               </View>
             </RowComponent>
@@ -349,17 +354,6 @@ function SettingsSection({
 
 function createStyles(colors: any) {
   return StyleSheet.create({
-    loadingScreen: {
-      flex: 1,
-      backgroundColor: colors.background,
-      justifyContent: "center",
-      alignItems: "center",
-    },
-    loadingText: {
-      color: colors.muted,
-      fontWeight: "700",
-      marginTop: 10,
-    },
     screen: {
       flex: 1,
       backgroundColor: colors.background,
@@ -477,14 +471,6 @@ function createStyles(colors: any) {
       flexDirection: "row",
       alignItems: "center",
       gap: 12,
-    },
-    settingIcon: {
-      width: 38,
-      height: 38,
-      borderRadius: 19,
-      backgroundColor: colors.background,
-      alignItems: "center",
-      justifyContent: "center",
     },
     settingLabel: {
       fontSize: 15,

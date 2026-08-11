@@ -1,8 +1,5 @@
 import { supabase } from "@/lib/supabase";
 
-const SANDBOX_PUBLIC_TOKEN =
-  "public-sandbox-00000000-0000-0000-0000-000000000000";
-
 async function getAuthHeaders() {
   const {
     data: { session },
@@ -39,7 +36,7 @@ export async function createPlaidLinkToken() {
   return data.link_token as string;
 }
 
-export async function connectSandboxBank() {
+export async function exchangePlaidPublicToken(publicToken: string) {
   const headers = await getAuthHeaders();
 
   const response = await fetch(
@@ -48,7 +45,7 @@ export async function connectSandboxBank() {
       method: "POST",
       headers,
       body: JSON.stringify({
-        public_token: SANDBOX_PUBLIC_TOKEN,
+        public_token: publicToken,
       }),
     }
   );
@@ -56,7 +53,7 @@ export async function connectSandboxBank() {
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(data.error || "Failed to connect sandbox bank.");
+    throw new Error(data.error || "Failed to exchange Plaid public token.");
   }
 
   return data as {
@@ -67,31 +64,24 @@ export async function connectSandboxBank() {
 }
 
 export async function syncBankTransactions() {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-  
-    if (!session) {
-      throw new Error("User not authenticated");
+  const headers = await getAuthHeaders();
+
+  const response = await fetch(
+    `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/sync-bank-transactions`,
+    {
+      method: "POST",
+      headers,
     }
-  
-    const response = await fetch(
-      `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/sync-bank-transactions`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
-          "Content-Type": "application/json",
-        },
-      }
-    );
-  
-    const data = await response.json();
-  
-    if (!response.ok) {
-      throw new Error(data.error || "Failed to sync bank transactions.");
-    }
-  
-    return data;
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Failed to sync bank transactions.");
   }
+
+  return data as {
+    success: boolean;
+    imported_count: number;
+  };
+}

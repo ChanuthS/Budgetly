@@ -1,35 +1,35 @@
+import { IconBadge, LoadingState, PrimaryButton } from "@/components/common";
 import { COLORS } from "@/constants/colors";
 import {
-    cancelAllBudgetlyNotifications,
-    getNotificationPreferences,
-    sendTestNotification,
-    toggleMonthlyReportReminder,
-    toggleWeeklyBudgetCheck,
+  cancelAllBudgetlyNotifications,
+  getNotificationPreferences,
+  sendTestNotification,
+  toggleMonthlyReportReminder,
+  toggleWeeklyBudgetCheck,
 } from "@/services/notificationService";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    ScrollView,
-    StyleSheet,
-    Switch,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 export default function NotificationsScreen() {
   const [loading, setLoading] = useState(true);
-
   const [weeklyBudget, setWeeklyBudget] = useState(false);
   const [monthlyReport, setMonthlyReport] = useState(false);
+
+  const enabledCount = [weeklyBudget, monthlyReport].filter(Boolean).length;
 
   async function loadPreferences() {
     try {
       setLoading(true);
-
       const prefs = await getNotificationPreferences();
 
       setWeeklyBudget(prefs.weeklyBudgetCheck);
@@ -60,11 +60,7 @@ export default function NotificationsScreen() {
   async function handleTestNotification() {
     try {
       await sendTestNotification();
-
-      Alert.alert(
-        "Success",
-        "A test notification has been scheduled."
-      );
+      Alert.alert("Success", "A test notification has been scheduled.");
     } catch (error: any) {
       Alert.alert("Notification Error", error.message);
     }
@@ -93,30 +89,41 @@ export default function NotificationsScreen() {
   );
 
   if (loading) {
-    return (
-      <View style={styles.loading}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-      </View>
-    );
+    return <LoadingState />;
   }
 
   return (
-    <ScrollView style={styles.screen}>
+    <ScrollView style={styles.screen} showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
-          <Ionicons
-            name="chevron-back"
-            size={24}
-            color={COLORS.text}
-          />
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <Ionicons name="chevron-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
 
         <Text style={styles.title}>Notifications</Text>
 
         <View style={{ width: 40 }} />
+      </View>
+
+      <View style={styles.statusCard}>
+        <IconBadge
+          name="notifications-outline"
+          size={50}
+          iconSize={24}
+          backgroundColor={COLORS.primary}
+          color="#FFFFFF"
+        />
+
+        <View style={{ flex: 1 }}>
+          <Text style={styles.statusTitle}>
+            {enabledCount > 0 ? "Notifications enabled" : "Notifications off"}
+          </Text>
+
+          <Text style={styles.statusSubtitle}>
+            {enabledCount > 0
+              ? `${enabledCount} Budgetly reminder${enabledCount === 1 ? "" : "s"} active`
+              : "Turn on reminders to let Penny help you stay on track."}
+          </Text>
+        </View>
       </View>
 
       <View style={styles.card}>
@@ -132,35 +139,20 @@ export default function NotificationsScreen() {
           subtitle="First day of every month"
           value={monthlyReport}
           onValueChange={handleMonthlyToggle}
+          isLast
         />
       </View>
 
-      <TouchableOpacity
-        style={styles.actionButton}
+      <PrimaryButton
+        title="Send Test Notification"
+        icon="notifications"
         onPress={handleTestNotification}
-      >
-        <Ionicons
-          name="notifications"
-          size={20}
-          color="#FFFFFF"
-        />
-        <Text style={styles.actionText}>
-          Send Test Notification
-        </Text>
-      </TouchableOpacity>
+        style={styles.testButton}
+      />
 
-      <TouchableOpacity
-        style={styles.cancelButton}
-        onPress={handleCancelAll}
-      >
-        <Ionicons
-          name="close-circle-outline"
-          size={20}
-          color="#EF4444"
-        />
-        <Text style={styles.cancelText}>
-          Cancel All Notifications
-        </Text>
+      <TouchableOpacity style={styles.cancelButton} onPress={handleCancelAll}>
+        <Ionicons name="close-circle-outline" size={20} color="#EF4444" />
+        <Text style={styles.cancelText}>Cancel All Notifications</Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -171,49 +163,40 @@ function NotificationRow({
   subtitle,
   value,
   onValueChange,
+  isLast,
 }: {
   title: string;
   subtitle: string;
   value: boolean;
   onValueChange: (value: boolean) => void;
+  isLast?: boolean;
 }) {
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, isLast && styles.lastRow]}>
       <View style={{ flex: 1 }}>
-        <Text style={styles.rowTitle}>
-          {title}
-        </Text>
-
-        <Text style={styles.rowSubtitle}>
-          {subtitle}
-        </Text>
+        <Text style={styles.rowTitle}>{title}</Text>
+        <Text style={styles.rowSubtitle}>{subtitle}</Text>
       </View>
 
       <Switch
         value={value}
         onValueChange={onValueChange}
         trackColor={{
+          false: COLORS.border,
           true: COLORS.primary,
         }}
+        thumbColor="#FFFFFF"
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  loading: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: COLORS.background,
-  },
-
   screen: {
     flex: 1,
     backgroundColor: COLORS.background,
     paddingHorizontal: 20,
   },
-
   header: {
     paddingTop: 56,
     paddingBottom: 22,
@@ -221,7 +204,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-
   backButton: {
     width: 42,
     height: 42,
@@ -230,19 +212,36 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-
   title: {
     fontSize: 28,
     fontWeight: "900",
     color: COLORS.text,
   },
-
+  statusCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 24,
+    padding: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    marginBottom: 16,
+  },
+  statusTitle: {
+    color: COLORS.text,
+    fontSize: 17,
+    fontWeight: "900",
+  },
+  statusSubtitle: {
+    color: COLORS.muted,
+    marginTop: 4,
+    lineHeight: 20,
+    fontWeight: "600",
+  },
   card: {
     backgroundColor: COLORS.card,
     borderRadius: 24,
     overflow: "hidden",
   },
-
   row: {
     padding: 18,
     flexDirection: "row",
@@ -250,35 +249,21 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-
+  lastRow: {
+    borderBottomWidth: 0,
+  },
   rowTitle: {
     color: COLORS.text,
     fontWeight: "800",
     fontSize: 15,
   },
-
   rowSubtitle: {
     color: COLORS.muted,
     marginTop: 4,
   },
-
-  actionButton: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 20,
-    paddingVertical: 16,
+  testButton: {
     marginTop: 26,
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-    gap: 10,
   },
-
-  actionText: {
-    color: "#FFFFFF",
-    fontWeight: "800",
-    fontSize: 15,
-  },
-
   cancelButton: {
     backgroundColor: COLORS.card,
     borderRadius: 20,
@@ -290,7 +275,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
   },
-
   cancelText: {
     color: "#EF4444",
     fontWeight: "800",
